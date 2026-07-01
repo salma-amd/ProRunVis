@@ -28,6 +28,10 @@ dependencies {
 
     // Dependency for the java parser used in this project
     implementation ("com.github.javaparser:javaparser-symbol-solver-core:3.25.6")
+
+    // SrcTracer instrumenter and runtime (local JARs)
+    implementation(files("libs/srctracer-instrumenter.jar"))
+    implementation(files("libs/srctracer-runtime.jar"))
 }
 
 // Apply a specific Java toolchain to ease working on different environments.
