@@ -21,6 +21,39 @@ class AbstractRetracerTest extends Tester {
     private final String testDir = "src/test/testfiles/abstractretracer/";
 
     @Test
+    void demoRetracerOutputOnly() throws IOException {
+        Path rootDir = Paths.get(testDir + "demo/resources/in");
+        ProjectRoot projectRoot = new SymbolSolverCollectionStrategy()
+                .collect(rootDir.toAbsolutePath());
+        List<CompilationUnit> cus = createCompilationUnits(projectRoot);
+
+        File traceFile = new File(testDir + "demo/resources/traceFile.tr");
+        Instrumenter.setupTrace(traceFile);
+
+        Map<Integer, Node> map = new HashMap<>();
+        cus.forEach(cu -> {
+            Preprocessor.run(cu);
+            Instrumenter.run(cu, map);
+        });
+
+        AbstractRetracer retracer = new AbstractRetracer(
+                cus, map, testDir + "demo/trace.txt", rootDir);
+        Stack<Integer> retracedTokens = retracer.retrace();
+
+        System.out.println("=== AbstractRetracer output (block IDs, top-of-stack first) ===");
+        List<Integer> ids = new ArrayList<>(retracedTokens);
+        Collections.reverse(ids);
+        System.out.println(ids);
+
+        System.out.println("\n=== Block ID → AST node mapping ===");
+        for (int id : ids) {
+            Node node = map.get(id);
+            System.out.println("  Block " + id + " → " + node.getClass().getSimpleName()
+                    + " at " + node.getRange().orElse(null));
+        }
+    }
+
+    @Test
     void demoTest() throws IOException {
         process(testDir + "demo/resources",
                 testDir + "demo/trace.txt",

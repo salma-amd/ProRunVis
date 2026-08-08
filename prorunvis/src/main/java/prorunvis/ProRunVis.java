@@ -142,6 +142,11 @@ public final class ProRunVis {
                     AbstractRetracer retracer = new AbstractRetracer(
                             cus, map, srcTracerTrace, Paths.get(args[0]));
                     Stack<Integer> retraced = retracer.retrace();
+
+                    java.util.List<Integer> ids = new java.util.ArrayList<>(retraced);
+                    java.util.Collections.reverse(ids);
+                    System.out.println("AbstractRetracer block IDs (execution order): " + ids);
+
                     processor = new TraceProcessor(map, retraced, Paths.get(args[0]));
                 } else {
                     // Original path: compile, run, read block-ID trace
