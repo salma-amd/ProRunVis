@@ -129,7 +129,8 @@ public final class SingleRunProcessingService implements ProcessingService {
     private String findSrcTracerTrace() {
         try (Stream<Path> paths = Files.walk(inLocation)) {
             return paths
-                    .filter(p -> p.toString().endsWith(".trace.txt"))
+                    .filter(p -> p.toString().endsWith(".trace.txt")
+                            || p.toString().endsWith(".trace"))
                     .map(Path::toString)
                     .findFirst()
                     .orElse(null);
