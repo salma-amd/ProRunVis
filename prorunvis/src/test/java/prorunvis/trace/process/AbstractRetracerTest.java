@@ -61,6 +61,13 @@ class AbstractRetracerTest extends Tester {
     }
 
     @Test
+    void demoBinaryTraceProducesSameResult() throws IOException {
+        process(testDir + "demo/resources",
+                testDir + "demo/trace.trace",
+                testDir + "demosolution/expectedTraceNodes.tr");
+    }
+
+    @Test
     void ifElseTest() throws IOException {
         process(testDir + "ifelse/resources",
                 testDir + "ifelse/trace.txt",

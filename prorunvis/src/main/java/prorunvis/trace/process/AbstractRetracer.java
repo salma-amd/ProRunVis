@@ -61,7 +61,13 @@ public class AbstractRetracer {
 
         this.funcIdToMethod = buildFuncIdMap();
         this.reverseBlockIdMap = buildReverseBlockIdMap();
-        this.tokens = tokenize(Files.readString(Path.of(traceFilePath)).trim());
+
+        Path tracePath = Path.of(traceFilePath);
+        if (traceFilePath.endsWith(".trace")) {
+            this.tokens = tokenizeBinary(Files.readAllBytes(tracePath));
+        } else {
+            this.tokens = tokenize(Files.readString(tracePath).trim());
+        }
         this.pos = 0;
     }
 
@@ -84,6 +90,8 @@ public class AbstractRetracer {
         }
         emitBlockId(mainMethod);
         retraceMethodBody(mainMethod);
+
+        validateTraceConsumed();
 
         Stack<Integer> stack = new Stack<>();
         List<Integer> reversed = new ArrayList<>(output);
@@ -446,6 +454,152 @@ public class AbstractRetracer {
         // only lowercase hex — uppercase letters are token markers (C, I, O, R, T, U, J, E)
         return (c >= '0' && c <= '9')
                 || (c >= 'a' && c <= 'f');
+    }
+
+    // ── Binary trace tokenizer ─────────────────────────────────────────
+
+    private static final int BIN_FUNC_4    = 0x00;
+    private static final int BIN_FUNC_12   = 0x10;
+    private static final int BIN_FUNC_20   = 0x20;
+    private static final int BIN_FUNC_28   = 0x30;
+    private static final int BIN_FUNC_ANON = 0x41;
+    private static final int BIN_FUNC_32   = 0x43;
+    private static final int BIN_END       = 0x45;
+    private static final int BIN_RETURN    = 0x52;
+    private static final int BIN_TRY       = 0x54;
+    private static final int BIN_CATCH     = 0x68;
+
+    private static List<Token> tokenizeBinary(final byte[] data) {
+        List<Token> result = new ArrayList<>();
+        int i = 0;
+        boolean afterMarker = true;
+
+        while (i < data.length) {
+            int b = data[i] & 0xFF;
+
+            if (b >= 0xC0) {
+                // partial IE byte (1–5 decisions), flushed before a marker
+                decodeIeByte(b, result);
+                afterMarker = true;
+                i++;
+            } else if (b >= 0x80) {
+                if (afterMarker) {
+                    // CASE: 6-bit case ID encoded as 0x80 | caseId
+                    int caseId = b & 0x3F;
+                    for (int bit = 5; bit >= 0; bit--) {
+                        result.add(new Token(
+                                ((caseId >> bit) & 1) == 1 ? TokenType.IN : TokenType.OUT, 0));
+                    }
+                    // afterMarker stays true (CASE is followed by marker-context)
+                } else {
+                    // full IE byte (6 decisions)
+                    decodeIeByte(b, result);
+                    afterMarker = false;
+                }
+                i++;
+            } else if ((b & 0xF0) == BIN_FUNC_4) {
+                result.add(new Token(TokenType.FUNC, b & 0x0F));
+                afterMarker = true;
+                i++;
+            } else if ((b & 0xF0) == BIN_FUNC_12) {
+                int funcId = ((b & 0x0F) << 8) | (data[i + 1] & 0xFF);
+                result.add(new Token(TokenType.FUNC, funcId));
+                afterMarker = true;
+                i += 2;
+            } else if ((b & 0xF0) == BIN_FUNC_20) {
+                int funcId = ((b & 0x0F) << 16)
+                        | ((data[i + 1] & 0xFF) << 8)
+                        | (data[i + 2] & 0xFF);
+                result.add(new Token(TokenType.FUNC, funcId));
+                afterMarker = true;
+                i += 3;
+            } else if ((b & 0xF0) == BIN_FUNC_28) {
+                int funcId = ((b & 0x0F) << 24)
+                        | ((data[i + 1] & 0xFF) << 16)
+                        | ((data[i + 2] & 0xFF) << 8)
+                        | (data[i + 3] & 0xFF);
+                result.add(new Token(TokenType.FUNC, funcId));
+                afterMarker = true;
+                i += 4;
+            } else if (b == BIN_FUNC_ANON) {
+                result.add(new Token(TokenType.FUNC, 0));
+                afterMarker = true;
+                i++;
+            } else if (b == BIN_FUNC_32) {
+                int funcId = ((data[i + 1] & 0xFF) << 24)
+                        | ((data[i + 2] & 0xFF) << 16)
+                        | ((data[i + 3] & 0xFF) << 8)
+                        | (data[i + 4] & 0xFF);
+                result.add(new Token(TokenType.FUNC, funcId));
+                afterMarker = true;
+                i += 5;
+            } else if (b == BIN_END) {
+                result.add(new Token(TokenType.END, 0));
+                afterMarker = true;
+                i++;
+            } else if (b == BIN_RETURN) {
+                result.add(new Token(TokenType.RETURN, 0));
+                afterMarker = true;
+                i++;
+            } else if (b == BIN_TRY) {
+                result.add(new Token(TokenType.TRY, 0));
+                afterMarker = true;
+                i++;
+            } else if ((b & 0xF8) == BIN_CATCH) {
+                int lenType = b & 0x07;
+                i++;
+                int catchIdx;
+                if (lenType == 0x02) {
+                    // LEN_16: 2 bytes little-endian
+                    catchIdx = (data[i] & 0xFF) | ((data[i + 1] & 0xFF) << 8);
+                    i += 2;
+                } else {
+                    catchIdx = data[i] & 0xFF;
+                    i++;
+                }
+                result.add(new Token(TokenType.CATCH, catchIdx));
+                afterMarker = true;
+            } else {
+                // unknown byte, skip
+                i++;
+            }
+        }
+        return result;
+    }
+
+    private static void decodeIeByte(final int b, final List<Token> result) {
+        // find sentinel: highest 0-bit marks where decisions start below it
+        int sentinel = -1;
+        for (int bit = 7; bit >= 0; bit--) {
+            if ((b & (1 << bit)) == 0) {
+                sentinel = bit;
+                break;
+            }
+        }
+        if (sentinel < 0) {
+            return;
+        }
+        // read decisions from MSB to LSB below the sentinel
+        for (int bit = sentinel - 1; bit >= 0; bit--) {
+            result.add(new Token(
+                    (b & (1 << bit)) != 0 ? TokenType.IN : TokenType.OUT, 0));
+        }
+    }
+
+    // ── Trace validation ──────────────────────────────────────────────
+
+    private void validateTraceConsumed() {
+        // skip the trailing END token if present
+        if (hasMore() && peek().type() == TokenType.END) {
+            pos++;
+        }
+        if (hasMore()) {
+            int remaining = tokens.size() - pos;
+            throw new IllegalStateException(
+                    "Trace/source mismatch: " + remaining
+                            + " unconsumed token(s) after retracing. "
+                            + "The trace file may not match the provided source code.");
+        }
     }
 
     // ── Token stream helpers ────────────────────────────────────────────

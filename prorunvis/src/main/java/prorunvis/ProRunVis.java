@@ -13,6 +13,7 @@ import org.apache.commons.cli.*;
 import prorunvis.instrument.Instrumenter;
 import prorunvis.preprocess.Preprocessor;
 import prorunvis.trace.process.AbstractRetracer;
+import prorunvis.trace.process.Scanner;
 import prorunvis.trace.process.TraceProcessor;
 
 import java.io.BufferedWriter;
@@ -151,7 +152,14 @@ public final class ProRunVis {
                 } else {
                     // Original path: compile, run, read block-ID trace
                     CompileAndRun.run(cus, outputPath + "/instrumented", outputPath + "/compiled");
-                    processor = new TraceProcessor(map, traceFile.getPath(), Paths.get(args[0]));
+
+                    Scanner traceScanner = new Scanner(traceFile.getPath());
+                    Stack<Integer> originalTokens = traceScanner.readFile();
+                    java.util.List<Integer> origIds = new java.util.ArrayList<>(originalTokens);
+                    java.util.Collections.reverse(origIds);
+                    System.out.println("Original block IDs (execution order): " + origIds);
+
+                    processor = new TraceProcessor(map, originalTokens, Paths.get(args[0]));
                 }
 
                 processor.start();
