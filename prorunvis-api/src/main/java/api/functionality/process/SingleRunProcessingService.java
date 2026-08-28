@@ -105,6 +105,8 @@ public final class SingleRunProcessingService implements ProcessingService {
                 processor = new TraceProcessor(traceMap, retraced, inLocation);
             } catch (IOException e) {
                 throw new ProcessingException("Failed to read SrcTracer trace file.", e);
+            } catch (IllegalStateException e) {
+                throw new ProcessingException(e.getMessage(), e);
             }
         } else {
             System.out.println("[ProRunVis] Using original compile-and-run path");
