@@ -1,4 +1,4 @@
-# WP E — Instrumentation Overhead Benchmarks
+# WP E, Instrumentation Overhead Benchmarks
 
 ## Goal
 
@@ -27,7 +27,7 @@ This is a tight loop with one branch per iteration. It was chosen deliberately b
 
 ## Configurations Tested
 
-Six configurations were benchmarked — three per language:
+Six configurations were benchmarked, three per language:
 
 | # | Configuration       | Description                                      |
 |---|---------------------|--------------------------------------------------|
@@ -92,7 +92,7 @@ With `n = 1,000,000` producing ~2,000,000 events, this gives a nanosecond-per-ev
 
 - Each configuration was run **3 times** with `n = 1,000,000`
 - The **median of 3 runs** was taken as the result to reduce noise from background OS activity
-- No CPU pinning or turbo-boost control was applied — measurements were taken on a regular laptop under normal system load
+- No CPU pinning or turbo-boost control was applied, measurements were taken on a regular laptop under normal system load
 - Trace file sizes were recorded after each instrumented run for the format comparison (RQ4)
 
 ---
@@ -169,7 +169,7 @@ gcc -O3 -D_TEXT_TRACE_MODE -I$SRC_TRACER_INCL \
 
 The C SrcTracer is a Linux project (uses `syscall(SYS_write)`, GCC macros, etc.) and was not re-run on macOS. The C numbers from the prior Windows/WSL2 run are included for cross-language format comparison, but **the primary evaluation is the within-Java comparison** (uninstrumented vs. text vs. binary), where all measurements come from the same machine and environment.
 
-**The OS/filesystem does not affect the overhead measurement.** The timed section measures CPU-bound work — the instrumentation calls inside the loop are in-memory bit-packing and buffer operations. The overhead ratios (uninstrumented vs. instrumented) are computed within the same environment.
+**The OS/filesystem does not affect the overhead measurement.** The timed section measures CPU-bound work, the instrumentation calls inside the loop are in-memory bit-packing and buffer operations. The overhead ratios (uninstrumented vs. instrumented) are computed within the same environment.
 
 ---
 
@@ -179,7 +179,7 @@ The C SrcTracer is a Linux project (uses `syscall(SYS_write)`, GCC macros, etc.)
 
 | Configuration       | Run 1 (ms) | Run 2 (ms) | Run 3 (ms) | Median (ms) | Slowdown   | Trace size    |
 |---------------------|------------|------------|------------|-------------|------------|---------------|
-| Java uninstrumented |       2.16 |       2.04 |       2.03 |        2.04 | — baseline |             — |
+| Java uninstrumented |       2.16 |       2.04 |       2.03 |        2.04 |, baseline |            , |
 | Java text mode      |      57.22 |      51.35 |      50.77 |       51.35 |      25×   |   2,020,011 B |
 | Java binary mode    |       8.10 |       8.12 |       8.46 |        8.12 |      4.0×  |     336,674 B |
 
@@ -192,11 +192,11 @@ Calculated as `(median_instrumented − median_baseline) / 2,000,000 events`:
 | Text   | ~24.7 ns/event     |
 | Binary | ~3.0 ns/event      |
 
-### C Wall-Clock Times (WSL2, prior run — for cross-language reference)
+### C Wall-Clock Times (WSL2, prior run, for cross-language reference)
 
 | Configuration    | Median (ms) | Slowdown   | Trace size    |
 |------------------|-------------|------------|---------------|
-| C uninstrumented |         1.0 | — baseline |             — |
+| C uninstrumented |         1.0 |, baseline |            , |
 | C text mode      |         720 |      720×  |   2,020,009 B |
 | C binary mode    |         1.5 |      1.5×  |     336,672 B |
 
@@ -227,20 +227,20 @@ This is the headline implementation result. Binary mode's bit-packing stores up 
 
 Java text mode writes one character per trace event (`"I"`, `"O"`, etc.) through an `OutputStreamWriter`. Although Java's writer has an internal 8 KB buffer (which amortizes syscalls to ~250 for the entire run), each `write()` call still passes through a `synchronized` block and the UTF-8 encoder loop. The per-event cost of this path (~24.7 ns) is dominated by method-call and synchronization overhead.
 
-Java binary mode, by contrast, packs up to 6 I/O decisions into a single byte using bit-shift operations and writes to a 4 KB byte buffer — pure arithmetic with no synchronization or encoding overhead.
+Java binary mode, by contrast, packs up to 6 I/O decisions into a single byte using bit-shift operations and writes to a 4 KB byte buffer, pure arithmetic with no synchronization or encoding overhead.
 
 ### Why C Text Mode Has Higher Overhead Than Java Text Mode
 
 Counter-intuitive but explained by **I/O design**, not language performance:
 
-- **C text mode** uses `syscall(SYS_write, ...)` — a direct kernel call with **no userspace buffering**. Every trace character triggers one syscall (~2 million syscalls for this benchmark).
+- **C text mode** uses `syscall(SYS_write, ...)`, a direct kernel call with **no userspace buffering**. Every trace character triggers one syscall (~2 million syscalls for this benchmark).
 - **Java text mode** uses `OutputStreamWriter` with an internal **8 KB buffer**, reducing syscalls to ~250 for the entire run.
 
-This is a deliberate design choice in SrcTracer — C's text mode is marked experimental. The binary mode uses proper buffering, which is why C binary mode is fast (1.5× overhead).
+This is a deliberate design choice in SrcTracer, C's text mode is marked experimental. The binary mode uses proper buffering, which is why C binary mode is fast (1.5× overhead).
 
 ### Why C Binary Mode Has Lower Per-Event Overhead Than Java Binary Mode
 
-The C compiler expands trace calls (`_IF`, `_ELSE`, `_LOOP_BODY`) as **preprocessor macros** — literal text substitution directly into the caller's code. With `gcc -O3`, the instrumented inner loop compiles to ~12 instructions with **zero function calls**: the trace bit-packing (a single `rol` + `mov`) sits inline alongside the user's arithmetic.
+The C compiler expands trace calls (`_IF`, `_ELSE`, `_LOOP_BODY`) as **preprocessor macros**, literal text substitution directly into the caller's code. With `gcc -O3`, the instrumented inner loop compiles to ~12 instructions with **zero function calls**: the trace bit-packing (a single `rol` + `mov`) sits inline alongside the user's arithmetic.
 
 Java's JIT compiler (C2) does inline `Trace._IF()` and similar calls, but the resulting code still pays for language-runtime guarantees:
 - Null checks on the `out` field
@@ -252,7 +252,7 @@ The gap is fundamental: C macros are inline by construction and carry no runtime
 
 ### A Note on Absolute Times
 
-The absolute wall-clock times reported here are specific to the hardware and OS used for each measurement. Running the same benchmarks on a different machine would produce different absolute times, but the **overhead ratios** (e.g., binary mode is ~6× faster than text mode) remain stable across machines, because both the baseline and the instrumented version benefit equally from faster hardware. The ratios are the meaningful result — they characterize the instrumentation overhead independent of the machine.
+The absolute wall-clock times reported here are specific to the hardware and OS used for each measurement. Running the same benchmarks on a different machine would produce different absolute times, but the **overhead ratios** (e.g., binary mode is ~6× faster than text mode) remain stable across machines, because both the baseline and the instrumented version benefit equally from faster hardware. The ratios are the meaningful result, they characterize the instrumentation overhead independent of the machine.
 
 ---
 
@@ -262,9 +262,9 @@ The absolute wall-clock times reported here are specific to the hardware and OS 
 
 ProRunVis supports both SrcTracer trace formats through the `AbstractRetracer`:
 
-- **Text traces** (`.trace.txt`): read as a string and tokenized character by character (`C`, `I`, `O`, `R`, `T`, `U`, `J`, `E`). This is also the format ProRunVis's own built-in tracing uses — its `prorunvis.Trace.next_elem(int)` writes one block-ID integer per line to a plain text file.
+- **Text traces** (`.trace.txt`): read as a string and tokenized character by character (`C`, `I`, `O`, `R`, `T`, `U`, `J`, `E`). This is also the format ProRunVis's own built-in tracing uses, its `prorunvis.Trace.next_elem(int)` writes one block-ID integer per line to a plain text file.
 
-- **Binary traces** (`.trace`): read as a byte array and decoded by a binary tokenizer. The format uses bit-packing to store I/O decisions compactly — up to 6 decisions per byte instead of one character each. Function IDs use variable-length encoding (1–5 bytes depending on magnitude). Markers like `RETURN`, `TRY`, and `END` are stored as their ASCII byte values.
+- **Binary traces** (`.trace`): read as a byte array and decoded by a binary tokenizer. The format uses bit-packing to store I/O decisions compactly, up to 6 decisions per byte instead of one character each. Function IDs use variable-length encoding (1–5 bytes depending on magnitude). Markers like `RETURN`, `TRY`, and `END` are stored as their ASCII byte values.
 
 The format is **detected automatically by file extension**: `.trace` triggers the binary tokenizer, anything else uses the text tokenizer. Both tokenizers produce the same `List<Token>`, so the entire downstream pipeline (AST walk, block-ID emission, TraceProcessor) is shared and format-agnostic.
 
@@ -272,13 +272,13 @@ The format is **detected automatically by file extension**: `.trace` triggers th
 
 The binary format packs I/O decisions (if-branch vs. else-branch) as individual bits inside a single byte, using a sentinel-bit scheme:
 
-1. The IE byte starts at `0xFE` (`11111110`) — the `0` at bit 0 is the sentinel
+1. The IE byte starts at `0xFE` (`11111110`), the `0` at bit 0 is the sentinel
 2. Each `_IF` rotates the byte left (setting the new LSB to 1)
 3. Each `_ELSE` shifts the byte left (leaving the new LSB as 0)
 4. The sentinel `0` moves upward with each decision
 5. When the byte drops below `0xC0` (6 decisions packed), it is flushed to the buffer
 
-To decode a flushed IE byte: find the highest `0`-bit (the sentinel), then read all bits below it MSB-first — `1` = IN (if-branch taken), `0` = OUT (else-branch taken).
+To decode a flushed IE byte: find the highest `0`-bit (the sentinel), then read all bits below it MSB-first, `1` = IN (if-branch taken), `0` = OUT (else-branch taken).
 
 Example: `0xBB = 10111011` → sentinel at bit 6 → bits 5..0 = `1,1,1,0,1,1` → `I, I, I, O, I, I`.
 
@@ -303,7 +303,7 @@ This encoding achieves **6× compression** over text mode (6 decisions per byte 
 
 The `0x80–0xBF` range is shared between CASE and full IE bytes. An `afterMarker` state flag resolves the ambiguity: bytes in this range immediately following a marker are CASE; during active I/O packing they are full IE bytes.
 
-Note: `TRY_END` (`U` in text mode) does not exist in binary traces — the binary runtime's `_TRY_END()` is a no-op. The `retraceTry()` method handles this gracefully by checking for the token's presence before consuming it.
+Note: `TRY_END` (`U` in text mode) does not exist in binary traces, the binary runtime's `_TRY_END()` is a no-op. The `retraceTry()` method handles this gracefully by checking for the token's presence before consuming it.
 
 ---
 
@@ -320,6 +320,6 @@ Note: `TRY_END` (`U` in text mode) does not exist in binary traces — the binar
 
 1. **Microbenchmark**: The test program is a branch-dense tight loop with minimal computation per branch. Real programs with heavier computation per branch point will see proportionally lower overhead ratios.
 2. **Java and C measured on different machines**: Java on macOS Apple Silicon, C on WSL2/Windows. Within-language overhead ratios are valid; cross-language speed comparisons carry this caveat.
-3. **JIT warmup**: Java measurements include a warmup phase. Without warmup, Java numbers would be 2–3× worse — but warmup reflects realistic long-running application behavior.
+3. **JIT warmup**: Java measurements include a warmup phase. Without warmup, Java numbers would be 2–3× worse, but warmup reflects realistic long-running application behavior.
 4. **Single iteration size**: All measurements at `n = 1,000,000`. Ratios are expected to remain stable at larger values of `n`.
 5. **No system-level isolation**: Measurements taken on a regular laptop without CPU pinning or turbo-boost control. Median-of-3 mitigates outliers but does not eliminate system noise.

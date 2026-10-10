@@ -276,11 +276,21 @@ public class AbstractRetracer {
             // try block completed normally
             consume(TokenType.TRY_END);
         } else if (hasMore() && peek().type() == TokenType.CATCH) {
-            // exception caught
-            Token catchToken = consume(TokenType.CATCH);
-            int catchIdx = catchToken.value();
-            if (catchIdx < tryStmt.getCatchClauses().size()) {
-                CatchClause clause = tryStmt.getCatchClauses().get(catchIdx);
+            // exception caught — read try index, then decode catch clause from I/O bits
+            consume(TokenType.CATCH);
+            int totalCatches = tryStmt.getCatchClauses().size();
+            int bits = bitsNeeded(totalCatches);
+            int localIdx = 0;
+            for (int i = bits - 1; i >= 0; i--) {
+                if (hasMore()) {
+                    Token bit = consume();
+                    if (bit.type() == TokenType.IN) {
+                        localIdx |= (1 << i);
+                    }
+                }
+            }
+            if (localIdx >= 0 && localIdx < totalCatches) {
+                CatchClause clause = tryStmt.getCatchClauses().get(localIdx);
                 emitBlockId(clause);
                 flow = retraceBlock(clause.getBody());
             }
@@ -296,6 +306,14 @@ public class AbstractRetracer {
         }
 
         return flow;
+    }
+
+    private static int bitsNeeded(int totalCatches) {
+        if (totalCatches <= 1) return 0;
+        int bits = 0;
+        int val = totalCatches - 1;
+        while (val > 0) { bits++; val >>= 1; }
+        return bits;
     }
 
     // ── Method calls ────────────────────────────────────────────────────

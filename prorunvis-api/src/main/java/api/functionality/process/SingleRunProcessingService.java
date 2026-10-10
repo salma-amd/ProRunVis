@@ -53,6 +53,7 @@ public final class SingleRunProcessingService implements ProcessingService {
 
     @Override
     public void instrument() {
+        long startTime = System.nanoTime();
         StaticJavaParser.getParserConfiguration().setSymbolResolver(new JavaSymbolSolver(new CombinedTypeSolver()));
         ProjectRoot projectRoot =
                 new SymbolSolverCollectionStrategy().collect(inLocation);
@@ -75,33 +76,43 @@ public final class SingleRunProcessingService implements ProcessingService {
             Instrumenter.run(cu, traceMap);
         });
         Instrumenter.saveInstrumented(projectRoot, outLocation.toString() + "/instrumented");
+        long elapsed = System.nanoTime() - startTime;
+        System.out.printf("[ProRunVis] Instrument phase: %.2f ms%n", elapsed / 1_000_000.0);
     }
 
     @Override
     public void trace() {
         if (findSrcTracerTrace() != null) {
+            System.out.println("[ProRunVis] Trace phase: skipped (SrcTracer trace found)");
             return;
         }
 
+        long startTime = System.nanoTime();
         try {
             CompileAndRun.run(cus, outLocation.toString() + "/instrumented",
                     outLocation.toString() + "/compiled");
         } catch (IOException | InterruptedException | ArrayIndexOutOfBoundsException e) {
             throw new ProcessingException(e.getMessage());
         }
+        long elapsed = System.nanoTime() - startTime;
+        System.out.printf("[ProRunVis] Trace phase (compile+run): %.2f ms%n", elapsed / 1_000_000.0);
     }
 
     @Override
     public void process() {
+        long startTime = System.nanoTime();
         TraceProcessor processor;
         String srcTracerTrace = findSrcTracerTrace();
 
         if (srcTracerTrace != null) {
             System.out.println("[ProRunVis] Using SrcTracer path: " + srcTracerTrace);
             try {
+                long retStart = System.nanoTime();
                 AbstractRetracer retracer = new AbstractRetracer(
                         cus, traceMap, srcTracerTrace, inLocation);
                 Stack<Integer> retraced = retracer.retrace();
+                long retElapsed = System.nanoTime() - retStart;
+                System.out.printf("[ProRunVis] AbstractRetracer: %.2f ms%n", retElapsed / 1_000_000.0);
                 processor = new TraceProcessor(traceMap, retraced, inLocation);
             } catch (IOException e) {
                 throw new ProcessingException("Failed to read SrcTracer trace file.", e);
@@ -114,11 +125,16 @@ public final class SingleRunProcessingService implements ProcessingService {
         }
 
         try {
+            long tpStart = System.nanoTime();
             processor.start();
+            long tpElapsed = System.nanoTime() - tpStart;
+            System.out.printf("[ProRunVis] TraceProcessor: %.2f ms%n", tpElapsed / 1_000_000.0);
         } catch (IOException e) {
             throw new ProcessingException("An error occurred during processing of the trace.", e);
         }
         nodes = processor.getNodeList();
+        long totalElapsed = System.nanoTime() - startTime;
+        System.out.printf("[ProRunVis] Process phase total: %.2f ms%n", totalElapsed / 1_000_000.0);
     }
 
     @Override
