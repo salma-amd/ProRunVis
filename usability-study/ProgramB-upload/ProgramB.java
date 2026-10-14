@@ -8,15 +8,15 @@
  *   Alice:  avg 78, grade C
  *   Bob:    avg 41, grade F
  *   Clara:  avg 88, grade B
- *   David:  avg 65, grade D
+ *   David:  avg 64, grade D
  *
  *   Top student: Clara with average 88
  *   Failures per subject:
  *     Math: 1
- *     English: 0
- *     Physics: 2
+ *     English: 1
+ *     Physics: 1
  *     History: 0
- *   Subject with most failures: Physics (2)
+ *   Subject with most failures: Math (1)
  *
  * The program contains a bug. Find it.
  */
