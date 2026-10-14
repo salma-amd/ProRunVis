@@ -361,7 +361,7 @@ public class TraceProcessor {
             }
         }
         return false;
-    }∏
+    }
 
     /**
      * Advance through all parsable code of the current node and save ranges
